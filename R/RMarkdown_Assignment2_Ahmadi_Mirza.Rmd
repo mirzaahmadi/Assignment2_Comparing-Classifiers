@@ -3,13 +3,15 @@ title: "Comparing Random Forest and Logistic Regression Machine Learning Classif
 author: "Mirza Ali Murtuza Ahmadi"
 date: "2024-10-27"
 output:
-  word_document: default
   pdf_document: default
 ---
-**Introduction**
+
+## Introduction
+
   As AI advances, machine learning shows immense promise across industries, particularly in healthcare, where it has the potential to transform genetic analysis. Machine learning models for gene sequence classification are becoming essential in clinical settings, enabling faster, more accurate diagnoses and guiding treatment decisions (Hamed et al., 2023). By classifying gene sequences efficiently, healthcare providers can rapidly identify bacterial strains for targeted public health responses and personalized care, detect predispositions for hereditary diseases, and predict individual responses to medications based on drug metabolism genes (Habehh & Gohel, 2021). This adaptability enhances patient-centered care and public health strategies.
   Therefore, optimizing machine learning models for gene classification is therefore critical to improving accuracy, speed, and interpretability in clinical settings. This study aims to compare two prominent algorithms, K-Nearest Neighbors (KNN) and Random Forest, for classifying COI and CytB genes within the Mus genus, focusing on speed, accuracy, and feature importance. The genus Mus is chosen due to its relevance in human health research, as insights from Mus genetics often translate effectively to human applications, and KNN and Random Forest were chosen as they are commonly applied in gene sequence classification (Hamed et al., 2023).
 
+#### Load required packages
 
 ```{r}
 library(rentrez)
@@ -20,9 +22,11 @@ library(ggplot2)
 library(data.table)
 library(Biostrings)
 library(readxl)
+```
 
-## 1. Data Acquisition ----
+## 1. Data Acquisition
 
+```{r}
 # Set 'retmax' to 0 to retrieve total hit counts for COI and CytB genes in Mus genus, allowing for subsequent fetching of all sequences
 # coi_sequences <- entrez_search(db="nuccore", term='"mus"[Genus] AND "coi"[Gene]', retmax = 0)
 # max_coi_hits <- coi_sequences$count
@@ -74,27 +78,27 @@ coi_stringSet <- readDNAStringSet("../data/coi_sequences.fasta")
 cytb_stringSet <- readDNAStringSet("../data/cytb_sequences.fasta")
 
 # Convert sequence data into a DataFrame for easier data filtering/manipulation and analysis for both COI and CytB genes
-dfCOI <- data.frame(COI_Title = names(coi_stringSet), COI_Sequence = paste(coi_stringSet))
-dfCytB <- data.frame(CytB_Title = names(cytb_stringSet), CytB_Sequence = paste(cytb_stringSet))
+dfCOI <- data.frame(Title = names(coi_stringSet), Sequence = paste(coi_stringSet))
+dfCytB <- data.frame(Title = names(cytb_stringSet), Sequence = paste(cytb_stringSet))
 ```
 
-```{r}
-## 2. Data Exploration ----
+## 2. Data Exploration
 
+```{r}
 explore_data <- function(df) {
   cat("Dimensions:", dim(df), "\n")
-  cat("Total number of NA values in sequence column:", sum(is.na(df[[grep("_Sequence$", names(df))]])), "\n")
-  cat("Total number of gaps in sequence columns:", sum(str_count(df[[grep("_Sequence$", names(df))]], "-")), "\n")
+  cat("Total number of NA values in sequence column:", sum(is.na(df[,2])), "\n")
+  cat("Total number of gaps in sequence columns:", sum(str_count(df[,2], "-")), "\n")
 
   # Summary of sequence data
-  cat("Summary of sequence data:\n")
-  print(summary(str_count(df[[grep("_Sequence$", names(df))]]))) # This prints the typical summary stats
+  cat("Summary of sequence data:", "\n")
+  print(summary(str_count(df[,2]))) # This prints the typical summary stats
 
-  total_A <- sum(str_count(df[[grep("_Sequence$", names(df))]], "A"))
-  total_T <- sum(str_count(df[[grep("_Sequence$", names(df))]], "T"))
-  total_C <- sum(str_count(df[[grep("_Sequence$", names(df))]], "C"))
-  total_G <- sum(str_count(df[[grep("_Sequence$", names(df))]], "G"))
-  total_N <- sum(str_count(df[[grep("_Sequence$", names(df))]], "N"))
+  total_A <- sum(str_count(df[,2], "A"))
+  total_T <- sum(str_count(df[,2], "T"))
+  total_C <- sum(str_count(df[,2], "C"))
+  total_G <- sum(str_count(df[,2], "G"))
+  total_N <- sum(str_count(df[,2], "N"))
   total_nucleotides <- total_A + total_T + total_C + total_G + total_N
 
   cat("Proportion of A:", round((total_A / total_nucleotides * 100), 2), "%", "\n")
@@ -108,35 +112,43 @@ explore_data(dfCOI)
 explore_data(dfCytB)
 ```
 
-```{r}
-## 3. Data Filtering ----
+## 3. Data Filtering
 
+```{r}
 missing_data <- 0.01
-length_var <- 100
+length_var <- 100 
 
 # Create new filtered COI and CytB datasets
 dfCOI_filtered <- dfCOI %>%
-  mutate(Filtered_COI_Sequence = str_remove_all(COI_Sequence, "^N+|N+$|-")) %>% # remove Ns at start or end of sequence to homogenise data
-  filter(str_count(Filtered_COI_Sequence, "N") <= (missing_data * str_count(Filtered_COI_Sequence))) %>% # To ensure high quality data, remove any sequences with over 1% of ambiguous nucleotides
-  filter(str_count(Filtered_COI_Sequence) >= median(str_count(Filtered_COI_Sequence)) - length_var &
-    str_count(Filtered_COI_Sequence) <= median(str_count(Filtered_COI_Sequence)) + length_var) %>%
-  select(COI_Title, Filtered_COI_Sequence) # Remove sequences that are not close to the median to homogenise data
+  # remove Ns at start or end of sequence to homogenise data
+  mutate(Sequence = str_remove_all(Sequence, "^N+|N+$|-")) %>% 
+  # To ensure high quality data, remove any sequences with over 1% of ambiguous nucleotides
+  filter(str_count(Sequence, "N") <= 
+           (missing_data * str_count(Sequence))) %>%
+  # Remove sequences that are not close to the median to homogenise data
+  filter(str_count(Sequence) >= 
+           median(str_count(Sequence)) - length_var 
+         & str_count(Sequence) <= 
+           median(str_count(Sequence)) + length_var)
 
 dfCytB_filtered <- dfCytB %>%
-  mutate(Filtered_CytB_Sequence = str_remove_all(CytB_Sequence, "^N+|N+$|-")) %>%
-  filter(str_count(Filtered_CytB_Sequence, "N") <= (missing_data * str_count(CytB_Sequence))) %>%
-  filter(str_count(Filtered_CytB_Sequence) >= median(str_count(Filtered_CytB_Sequence)) - length_var & str_count(Filtered_CytB_Sequence) <= median(str_count(Filtered_CytB_Sequence)) + length_var) %>%
-  select(CytB_Title, Filtered_CytB_Sequence)
+  mutate(Sequence = str_remove_all(Sequence, "^N+|N+$|-")) %>%
+  filter(str_count(Sequence, "N") <= 
+           (missing_data * str_count(Sequence))) %>%
+  filter(str_count(Sequence) >= 
+           median(str_count(Sequence)) - length_var 
+         & str_count(Sequence) <= 
+           median(str_count(Sequence)) + length_var) 
 
 explore_data(dfCOI_filtered)
 explore_data(dfCytB_filtered)
 ```
 
-```{r}
-# 4. Sequence Length Visualization and K-Mer Frequency Visualization ----
-# Create a histogram to showcase the distribution of filtered sequence lengths for COI and CytB. This will show the variation between sequence lengths in COI and CytB, in order to get a better grasp of the lengths of sequence data we are working with as well as showcasing a visual distinction between the sequence lengths of the different genes. The outputted figure shows two normal distributions around the median sequence length around each gene type, with them being distant from each other on the x axis, indicating the differences in sequence length between the two genes.
-seq_length_COI_filtered <- nchar(dfCOI_filtered$Filtered_COI_Sequence)
-seq_length_CytB_filtered <- nchar(dfCytB_filtered$Filtered_CytB_Sequence)
+## 4. Sequence Length Visualization and K-Mer Frequency Visualization
+
+```{r, fig.cap = "Histogram showcases the distribution of filtered sequence lengths for COI and CytB. This will show the variation between sequence lengths in COI and CytB, in order to get a better grasp of the lengths of sequence data we are working with as well as showcasing a visual distinction between the sequence lengths of the different genes. The outputted figure shows two normal distributions around the median sequence length around each gene type, with them being distant from each other on the x axis, indicating the differences in sequence length between the two genes."}
+seq_length_COI_filtered <- nchar(dfCOI_filtered$Sequence)
+seq_length_CytB_filtered <- nchar(dfCytB_filtered$Sequence)
 
 
 hist(seq_length_COI_filtered,
@@ -165,65 +177,34 @@ legend("top",
   x.intersp = 1,
   y.intersp = 0.6
 )
+```
 
 
-
-# Create a heatmap to show dinucleotide frequency distribution comparing COI and CytB averages. The result of this heatmap indicated the differences in dinucelotide proportions between COI and CytB in terms of dinucleotide frequency, which is an important metric that can be used whne training classifiers downstream.
-dfCOI_filtered$Filtered_COI_Sequence <- DNAStringSet(dfCOI_filtered$Filtered_COI_Sequence)
-dfCytB_filtered$Filtered_CytB_Sequence <- DNAStringSet(dfCytB_filtered$Filtered_CytB_Sequence)
-
-# Obtain the letter frequency for both sequences
-dfCOI_filtered <- cbind(dfCOI_filtered, as.data.frame(letterFrequency(dfCOI_filtered$Filtered_COI_Sequence, letters = c("A", "C", "G", "T"))))
-dfCytB_filtered <- cbind(dfCytB_filtered, as.data.frame(letterFrequency(dfCytB_filtered$Filtered_CytB_Sequence, letters = c("A", "C", "G", "T"))))
+```{r, fig.cap = "Heatmap shows dinucleotide frequency distribution comparing COI and CytB averages. The result of this heatmap indicated the differences in dinucelotide proportions between COI and CytB in terms of dinucleotide frequency, which is an important metric that can be used whne training classifiers downstream."}
 
 
-# Attain the proportions of each nucleotide per sequence to later attain dinucleotide proportion, remove unneeded 'total' column
-dfCOI_filtered <- dfCOI_filtered %>%
-  mutate(
-    total = A + T + C + G,
-    Aprop = A / total,
-    Cprop = C / total,
-    Tprop = T / total,
-    Gprop = G / total,
-  ) %>%
-  select(-total)
-
-dfCytB_filtered <- dfCytB_filtered %>%
-  mutate(
-    total = A + T + C + G,
-    Aprop = A / total,
-    Cprop = C / total,
-    Tprop = T / total,
-    Gprop = G / total,
-  ) %>%
-  select(-total)
+dfCOI_filtered$Sequence <- DNAStringSet(dfCOI_filtered$Sequence)
+dfCytB_filtered$Sequence <- DNAStringSet(dfCytB_filtered$Sequence)
 
 # Calculate dinucleotide frequency for each sequence for CytB and COI
-dfCOI_filtered <- cbind(dfCOI_filtered, as.data.frame(dinucleotideFrequency(dfCOI_filtered$Filtered_COI_Sequence, as.prob = TRUE)))
+dfCOI_filtered <- cbind(dfCOI_filtered, 
+                        as.data.frame(dinucleotideFrequency(dfCOI_filtered$Sequence,
+                                                            as.prob = TRUE)))
 
-dfCytB_filtered <- cbind(dfCytB_filtered, as.data.frame(dinucleotideFrequency(dfCytB_filtered$Filtered_CytB_Sequence, as.prob = TRUE)))
-
-
-# Obtain the average dinucleotide frequencies for COI and CytB and merge them into one dataframe to make the heatmap
-dinucleotide_columns <- ncol(dfCytB_filtered) - 16:ncol(dfCytB_filtered)
+dfCytB_filtered <- cbind(dfCytB_filtered, 
+                         as.data.frame(dinucleotideFrequency(dfCytB_filtered$Sequence,
+                                                             as.prob = TRUE)))
 
 # Calculate the averages for each dinucleotide for COI and CytB gene
-average_dinucleotide_proportions_COI <- colMeans(dfCOI_filtered[, 13:ncol(dfCOI_filtered)], na.rm = TRUE)
-average_dinucleotide_proportions_COI_df <- as.data.frame(t(average_dinucleotide_proportions_COI)) %>%
-  mutate(Gene = "COI") %>%
-  select(Gene, everything())
-
-average_dinucleotide_proportions_CytB <- colMeans(dfCytB_filtered[, 13:ncol(dfCytB_filtered)], na.rm = TRUE)
-average_dinucleotide_proportions_CytB_df <- as.data.frame(t(average_dinucleotide_proportions_CytB)) %>%
-  mutate(Gene = "CytB") %>%
-  select(Gene, everything())
-
-combined_average_CytB_COI <- rbind(average_dinucleotide_proportions_COI_df, average_dinucleotide_proportions_CytB_df)
+average_dinucleotide_proportions_COI <- colMeans(dfCOI_filtered[, -(1:2)],
+                                                 na.rm = TRUE)
+average_dinucleotide_proportions_CytB <- colMeans(dfCytB_filtered[, -(1:2)],
+                                                  na.rm = TRUE)
 
 # Create the heatmap to visualize the differences in dinucleotide proportions between COI and CytB
-rownames(combined_average_CytB_COI) <- combined_average_CytB_COI$Gene
-combined_average_CytB_COI <- combined_average_CytB_COI[, -1]
-matrix_heatmap <- as.matrix(combined_average_CytB_COI)
+matrix_heatmap <- t(as.matrix(as.data.frame(list(COI = average_dinucleotide_proportions_COI,
+                                                 CytB = average_dinucleotide_proportions_CytB)),
+                              byrow = TRUE))
 
 heatmap(matrix_heatmap,
   Rowv = NA, Colv = NA, scale = "none",
@@ -232,55 +213,35 @@ heatmap(matrix_heatmap,
 )
 ```
 
+## 5. Train, test and compare classifiers
+
 ```{r}
-# 5. Train, test and compare classifiers ----
+dfCOI_filtered$Gene <- "COI"
+dfCytB_filtered$Gene <- "CytB"
+df_combined <- rbind(dfCOI_filtered, dfCytB_filtered)
 
 # Convert sequence data back into character data in order to more readily use tidyverse functions
-dfCOI_filtered$Filtered_COI_Sequence <- as.character(dfCOI_filtered$Filtered_COI_Sequence)
-dfCytB_filtered$Filtered_CytB_Sequence <- as.character(dfCytB_filtered$Filtered_CytB_Sequence)
-
-dfCOI_filtered <- as_tibble(dfCOI_filtered)
-dfCytB_filtered <- as_tibble(dfCytB_filtered)
-
+df_combined$Sequence <- as.character(df_combined$Sequence)
 
 # create validation which samples 250 sequences, this number was chosen to follow the conventional 80:20 training/testing split in machine learning
 set.seed(727)
-dfValidation_COI <- dfCOI_filtered %>%
-  sample_n(250) %>%
-  mutate(Gene = "COI") %>%
-  dplyr::rename(Title = COI_Title, Sequence = Filtered_COI_Sequence)
-
-
-dfValidation_CytB <- dfCytB_filtered %>%
-  sample_n(250) %>%
-  mutate(Gene = "CytB") %>%
-  dplyr::rename(Title = CytB_Title, Sequence = Filtered_CytB_Sequence)
-
-# Combine both validation datasets into one dataset for easier implementation into classifier
-combined_validation_df <- rbind(dfValidation_COI, dfValidation_CytB)
+combined_validation_df <- df_combined %>%
+  group_by(Gene) %>%
+  sample_n(250)
 
 # create training dataset which samples 950 sequences - this number was chosen to follow the conventional 80:20 training/testing split in machine learning
 set.seed(277)
-dfTraining_COI <- dfCOI_filtered %>%
-  filter(!COI_Title %in% dfValidation_COI$COI_Title) %>%
-  sample_n(950) %>%
-  mutate(Gene = "COI") %>%
-  dplyr::rename(Title = COI_Title, Sequence = Filtered_COI_Sequence)
-
-dfTraining_CytB <- dfCytB_filtered %>%
-  filter(!CytB_Title %in% dfValidation_CytB$CytB_Title) %>%
-  sample_n(950) %>%
-  mutate(Gene = "CytB") %>%
-  dplyr::rename(Title = CytB_Title, Sequence = Filtered_CytB_Sequence)
-
-# Combine training datasets for easier implementation into model
-combined_training_df <- rbind(dfTraining_COI, dfTraining_CytB)
+combined_training_df <- df_combined %>%
+  group_by(Gene) %>%
+  filter(!Title %in% combined_validation_df$Title) %>%
+  sample_n(950)
 
 # Ensure that the Gene column is a factor not a character vector so that it can be used to to train the model
 combined_training_df$Gene <- as.factor(combined_training_df$Gene)
+
 # use the random forest algorithm for training a classifier
 rf_gene_classifier <- train(Gene ~ .,
-  data = combined_training_df[, 13:27],
+  data = combined_training_df[, -(1:2)],
   method = "rf",
   importance = TRUE,
   trControl = trainControl(method = "cv", number = 10)
@@ -288,7 +249,7 @@ rf_gene_classifier <- train(Gene ~ .,
 
 # using the linear regression algorithm to train a separate classifier
 lr_gene_classifier <- train(Gene ~ .,
-  data = combined_training_df[, 13:27],
+  data = combined_training_df[, -(1:2)],
   method = "glm",
   family = "binomial",
   tuneLength = 10
@@ -298,18 +259,17 @@ rf_gene_classifier
 lr_gene_classifier
 
 # Assess the accuracy of the testing dataset with random forest
-predictValidation_rf <- predict(rf_gene_classifier, combined_validation_df[, c(27, 13:27)])
+predictValidation_rf <- predict(rf_gene_classifier, combined_validation_df[, -(1:2)])
 table(observed = combined_validation_df$Gene, predicted = predictValidation_rf)
 
 # Assess the accuracy of the testing dataset with linear regression
-predictValidation_lg <- predict(lr_gene_classifier, combined_validation_df[, c(27, 13:27)])
+predictValidation_lg <- predict(lr_gene_classifier, combined_validation_df[, -(1:2)])
 table(observed = combined_validation_df$Gene, predicted = predictValidation_rf)
 ```
 
-```{r}
-# 6. Create visualizations to compare feature importance and speed of RF and KNN classifiers ----
+# 6. Create visualizations to compare feature importance and speed of RF and KNN classifiers
 
-# lollipop plot which shows the feature importance of different dinucleotides for the random forest and logistic regression algorithm. The different algorithms assign different importance scores to different dinucleotides due to how the different algorithms learn from the data and what they prioritize.
+```{r, fig.cap = "Lollipop plot which shows the feature importance of different dinucleotides for the random forest and logistic regression algorithm. The different algorithms assign different importance scores to different dinucleotides due to how the different algorithms learn from the data and what they prioritize."}
 combined_validation_df$Gene <- factor(combined_validation_df$Gene, levels = c("COI", "CytB"))
 
 feature_importance_RF <- varImp(rf_gene_classifier)
