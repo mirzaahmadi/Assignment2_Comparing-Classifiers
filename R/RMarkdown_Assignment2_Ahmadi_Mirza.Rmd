@@ -22,6 +22,7 @@ library(ggplot2)
 library(data.table)
 library(Biostrings)
 library(readxl)
+library(patchwork)
 ```
 
 ## 1. Data Acquisition
@@ -116,7 +117,7 @@ explore_data(dfCytB)
 
 ```{r}
 missing_data <- 0.01
-length_var <- 100 
+length_var <- 100
 
 # Create new filtered COI and CytB datasets
 dfCOI_filtered <- dfCOI %>%
@@ -146,7 +147,8 @@ explore_data(dfCytB_filtered)
 
 ## 4. Sequence Length Visualization and K-Mer Frequency Visualization
 
-```{r, fig.cap = "Histogram showcases the distribution of filtered sequence lengths for COI and CytB. This will show the variation between sequence lengths in COI and CytB, in order to get a better grasp of the lengths of sequence data we are working with as well as showcasing a visual distinction between the sequence lengths of the different genes. The outputted figure shows two normal distributions around the median sequence length around each gene type, with them being distant from each other on the x axis, indicating the differences in sequence length between the two genes."}
+```{r, fig.cap = "Histogram showcases the distribution of filtered sequence lengths for COI and CytB. This shows the variation between sequence lengths in COI and CytB, in order to get a better grasp of the lengths of sequence data we are working with as well as showcasing a visual distinction between the sequence lengths of the different genes. The figure shows two normal distributions around the median sequence length around each gene type, with them being distant from each other on the x axis, indicating the differences in sequence length between the two genes."}
+
 seq_length_COI_filtered <- nchar(dfCOI_filtered$Sequence)
 seq_length_CytB_filtered <- nchar(dfCytB_filtered$Sequence)
 
@@ -154,7 +156,6 @@ seq_length_CytB_filtered <- nchar(dfCytB_filtered$Sequence)
 hist(seq_length_COI_filtered,
   xlab = "Sequence Length",
   ylab = "Frequency",
-  main = "Overlay of COI and CytB Filtered Sequence Lengths",
   col = rgb(1, 0, 0, 0.5),
   breaks = "Sturges",
   xlim = c(400, 1400), # Extend x-axis to accomodate sequence length of both COI and CytB
@@ -182,7 +183,6 @@ legend("top",
 
 ```{r, fig.cap = "Heatmap shows dinucleotide frequency distribution comparing COI and CytB averages. The result of this heatmap indicated the differences in dinucelotide proportions between COI and CytB in terms of dinucleotide frequency, which is an important metric that can be used whne training classifiers downstream."}
 
-
 dfCOI_filtered$Sequence <- DNAStringSet(dfCOI_filtered$Sequence)
 dfCytB_filtered$Sequence <- DNAStringSet(dfCytB_filtered$Sequence)
 
@@ -202,20 +202,19 @@ average_dinucleotide_proportions_CytB <- colMeans(dfCytB_filtered[, -(1:2)],
                                                   na.rm = TRUE)
 
 # Create the heatmap to visualize the differences in dinucleotide proportions between COI and CytB
-matrix_heatmap <- t(as.matrix(as.data.frame(list(COI = average_dinucleotide_proportions_COI,
-                                                 CytB = average_dinucleotide_proportions_CytB)),
+matrix_heatmap <- t(as.matrix(data.frame(COI = average_dinucleotide_proportions_COI,
+                                                 CytB = average_dinucleotide_proportions_CytB),
                               byrow = TRUE))
 
 heatmap(matrix_heatmap,
   Rowv = NA, Colv = NA, scale = "none",
-  col = colorRampPalette(c("white", "blue"))(100),
-  xlab = "Dinucleotides", main = "Average Dinucleotide Frequencies by Gene"
-)
+  col = colorRampPalette(c("hotpink", "mediumpurple4", "lightseagreen"))(1000),
+  xlab = "Dinucleotides")
 ```
 
 ## 5. Train, test and compare classifiers
 
-```{r}
+```{r, message = FALSE}
 dfCOI_filtered$Gene <- "COI"
 dfCytB_filtered$Gene <- "CytB"
 df_combined <- rbind(dfCOI_filtered, dfCytB_filtered)
@@ -267,43 +266,57 @@ predictValidation_lg <- predict(lr_gene_classifier, combined_validation_df[, -(1
 table(observed = combined_validation_df$Gene, predicted = predictValidation_rf)
 ```
 
+
+
+
+
 # 6. Create visualizations to compare feature importance and speed of RF and KNN classifiers
 
-```{r, fig.cap = "Lollipop plot which shows the feature importance of different dinucleotides for the random forest and logistic regression algorithm. The different algorithms assign different importance scores to different dinucleotides due to how the different algorithms learn from the data and what they prioritize."}
-combined_validation_df$Gene <- factor(combined_validation_df$Gene, levels = c("COI", "CytB"))
+```{r, fig.cap = "Lollipop plots which shows the feature importance of different dinucleotides for the random forest and logistic regression algorithm. The different algorithms assign different importance scores to different dinucleotides due to how the different algorithms learn from the data and what they prioritize."}
+importance_plot <- function(classifier, type){
+feature_importance <- varImp(classifier)
 
-feature_importance_RF <- varImp(rf_gene_classifier)
-feature_importance_LR <- varImp(lr_gene_classifier)
+# Convert to data.table for easier manipulation
+imp_vec <- rowMeans(feature_importance$importance)
+imp <- data.table(
+  Feature = names(imp_vec),
+  Importance = imp_vec)
 
-# Convert to data.tables for easier manipulation
-imp_RF <- data.table(
-  Feature = rownames(feature_importance_RF$importance),
-  Importance = feature_importance_RF$importance[, "COI"]
-)
-imp_LR <- data.table(
-  Feature = rownames(feature_importance_LR$importance),
-  Importance = feature_importance_LR$importance[, "Overall"]
-)
-
-# Add a model identifier
-imp_RF[, Model := "Random Forest"]
-imp_LR[, Model := "Logistic Regression"]
-
-# Combine the two data.tables
-combined_imp <- rbind(imp_RF, imp_LR)
-
-# Create the lollipop plot
-ggplot(combined_imp, aes(x = Feature, y = Importance, color = Model)) +
-  geom_segment(aes(x = Feature, xend = Feature, y = 0, yend = Importance), size = 1) +
+# Create lollipop plot
+plot <- ggplot(data = imp, aes(x = reorder(Feature, Importance), 
+                                     y = Importance,
+                                     colour = type)) +
+  geom_segment(aes(x = reorder(Feature, Importance), 
+                   xend = reorder(Feature, Importance), 
+                   y = 0, 
+                   yend = Importance,
+                   colour = type), 
+               size = 1) +
   geom_point(size = 3) +
   coord_flip() +
   theme_minimal() +
-  labs(title = "Feature Importance Comparison between Logistic Regression and Random Forest Classifiers", x = "Features", y = "Feature Importance Score") +
-  theme(legend.title = element_blank())
+  labs(x = "Features", y = "Feature Importance Score")
+
+return(plot)}
+
+plot_RF <- importance_plot(rf_gene_classifier, "Random Forest")
+plot_LR <- importance_plot(lr_gene_classifier, "Logistic Regression")
+
+plot_RF + 
+  scale_color_manual(name = "Classifiers: ",
+                     limits = "Random Forest", 
+                     values = "lightseagreen") +
+  plot_LR + 
+  scale_color_manual(name = "",
+                     limits = "Logistic Regression", 
+                     values = "hotpink") +
+  patchwork::plot_layout(guides = "collect",
+                         axis_titles = "collect") & 
+  theme(legend.position = 'bottom')
+```
 
 
-
-# K-mer number vs Time elapsed Line Graph which shows the speed of training at different k mer sizes for the logistic regression and random forest algorithms. The random forest algorithm was slower at all k mer sizes, especially as k mer continued to increase the difference between the two algorithms in terms of speed grew farther and farther apart. Random forest seems to be increasingly slower with higher k mer, potentially due to the greater increase of decision tree complexity and number as k mer size continues to get larger.
+```{r, message = FALSE, fig.cap = "K-mer number vs time elapsed (A) and k-mer number vs model accuracy (B) fitted line graphs which show the speed of training and accuracy at different k mer sizes for the logistic regression and random forest algorithms. The random forest algorithm was slower at all k mer sizes, especially as k mer continued to increase the difference between the two algorithms in terms of speed grew farther and farther apart. Random forest seems to be increasingly slower with higher k mer, potentially due to the greater increase of decision tree complexity and number as k mer size continues to get larger."}
 
 # Simplify training data to only include relevant columns
 combined_training_df_simplified <- combined_training_df %>%
@@ -364,27 +377,48 @@ get_kmer_profile <- function(sequence, k) {
 combined_results <- read_excel("../data/kmer_data.xlsx")
 
 # Plot line graph to showcase the speed of the algorithm based on k-mer number for RF and LR algorithms
-ggplot(combined_results, aes(x = k, y = time.taken.seconds, color = model, group = model)) +
-  geom_line() +
-  geom_point() +
-  labs(
-    title = "Training Time vs K-mer Size",
-    x = "K-mer Size",
-    y = "Time Taken (seconds)"
-  ) +
-  theme_minimal()
+common_layers <- list(geom_point(size = 3),
+                      scale_color_manual(name = "Classifiers: ",
+                                         limits = c("Random Forest", "Logistic Regression"),
+                                         values = c("lightseagreen", "hotpink")),
+                      scale_shape_manual(name = "Classifiers: ",
+                                         limits = c("Random Forest", "Logistic Regression"),
+                                         values = c(8, 9)),
+                      theme_minimal())
+
+speed <- ggplot(combined_results, 
+                aes(x = k, y = time.taken.seconds, color = model, shape = model)) +
+  geom_smooth(method = "loess", 
+              formula = (y ~ exp(x)), 
+              span = 2, se = FALSE, size = 1) +
+  common_layers +
+  labs(x = "K-mer Size",
+       y = "Time Taken (seconds)")
+
+accuracy <- ggplot(combined_results, 
+                   aes(x = k, y = round((accuracy*100),2), color = model, shape = model)) +
+  geom_smooth(method = "loess", se = FALSE, size = 1) +
+  common_layers +
+  labs(x = "K-mer Size",
+       y = "% Accuracy")
+
+speed + accuracy +
+  patchwork::plot_layout(guides = "collect",
+                         axis_titles = "collect") + 
+  plot_annotation(tag_levels = c("A", "B")) & 
+  theme(legend.position = 'bottom')
 ```
 
 
-**Discussion**
+## Discussion
 After training, testing, and comparing my classifiers, I found that both performed equally well, accurately classifying 99% of the sequences during the testing phase. However, they differed in feature importance: Random Forest assigned the highest importance to the dinucleotide frequencies of GG, TC, and CA, while Logistic Regression prioritized CA, TT, and CG. This similarity in accuracy was expected, given the large, high-quality training dataset with minimal noise, which allowed both algorithms to robustly handle various data types and generalize effectively to unseen data. Although it was initially unexpected, further research into how different models learn from data clarified why feature importance varied between the two. Different classifiers prioritize features differently based on their learning algorithms, which explains the disparities in feature importance between Random Forest and Logistic Regression (Pudjihartono et al., 2022).
 
 Additionally, while I anticipated that an increase in k-mer size would lead to longer training times, I was surprised to find that Random Forest was generally slower across all k-mer sizes. In particular, it took nearly six times longer than Logistic Regression when the k-mer size reached 4. I suspect this is due to the significant scaling of decision trees and their increasing complexity as the k-mer count rises, which contributes to much slower training times. Overall, both models demonstrated solid accuracy; however, the differences in training times became more pronounced as the k-mer size increased. To further develop this project, future research can investigate sequence classifications using more ambiguous and unstructured data (which is commonplace in genomic sequence data), which often contain gaps and ambiguous nucleotides. Future tests with such data will help determine whether these algorithms maintain their accuracy and speed.
 
-**Acknowledgements**
+## Acknowledgements
 I would like to thank Thomas Tekle for helping me to refine my question and objective early on, as he encouraged me come up with a simple question and then build on it - whereas before, I was overthinking a more complex question, not even knowing where to start. He saved me a lot of time and effort in this regard. I would also like to thank Isha Baxi who helped to make sure I has all the information regarding the assignment 1 feedback and expectations when I was sick for the week. 
 
-**References**
+## References
 Hamed, B.A., Ibrahim, O.A.S. & Abd El-Hafeez, T. Optimizing classification efficiency with machine learning techniques for pattern matching. J Big Data 10, 124 (2023). https://doi.org/10.1186/s40537-023-00804-6
 
 Habehh, H., & Gohel, S. Machine Learning in Healthcare. Current genomics, 22(4), 291–300 (2021). https://doi.org/10.2174/1389202922666210705124359
