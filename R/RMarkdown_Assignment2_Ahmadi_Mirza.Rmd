@@ -6,6 +6,16 @@ output:
   pdf_document: default
 ---
 
+Primary author: Mirza Ali Murtuza Ahmadi
+
+Secondary author: Phoenix Armstrong
+
+Group members: Fatemeh Asgarian, Dilma Karunathilake
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 80), tidy = TRUE)
+```
+
 ## Introduction
 
   As AI advances, machine learning shows immense promise across industries, particularly in healthcare, where it has the potential to transform genetic analysis. Machine learning models for gene sequence classification are becoming essential in clinical settings, enabling faster, more accurate diagnoses and guiding treatment decisions (Hamed et al., 2023). By classifying gene sequences efficiently, healthcare providers can rapidly identify bacterial strains for targeted public health responses and personalized care, detect predispositions for hereditary diseases, and predict individual responses to medications based on drug metabolism genes (Habehh & Gohel, 2021). This adaptability enhances patient-centered care and public health strategies.
@@ -13,7 +23,7 @@ output:
 
 #### Load required packages
 
-```{r}
+```{r, message = FALSE}
 library(rentrez)
 library(stringr)
 library(dplyr)
@@ -79,8 +89,10 @@ coi_stringSet <- readDNAStringSet("../data/coi_sequences.fasta")
 cytb_stringSet <- readDNAStringSet("../data/cytb_sequences.fasta")
 
 # Convert sequence data into a DataFrame for easier data filtering/manipulation and analysis for both COI and CytB genes
-dfCOI <- data.frame(Title = names(coi_stringSet), Sequence = paste(coi_stringSet))
-dfCytB <- data.frame(Title = names(cytb_stringSet), Sequence = paste(cytb_stringSet))
+dfCOI <- data.frame(Title = names(coi_stringSet), 
+                    Sequence = paste(coi_stringSet))
+dfCytB <- data.frame(Title = names(cytb_stringSet), 
+                     Sequence = paste(cytb_stringSet))
 ```
 
 ## 2. Data Exploration
@@ -118,33 +130,37 @@ explore_data(dfCytB)
 ```{r}
 
 # create data filtering function to expand on usage of explore_data() function
-filter_seq <- function(df, range = 0.9, N_thresh = 0.01, len = 100, by = NULL){
-  if (is.null(by)) {by = "range"} # default
-  alpha <- (1-range)
-  q <- quantile(str_length(df$Sequence), probs = c(alpha/2, 0.5, 1-alpha/2))
+filter_seq <- function(df, range = 0.9, N_thresh = 0.01, len = 100, by = NULL) {
+  if (is.null(by)) {
+    by <- "range"
+  } # default
+  alpha <- (1 - range)
+  q <- quantile(str_length(df$Sequence), probs = c(alpha / 2, 0.5, 1 - alpha / 2))
   filtered <- df %>%
-  # remove Ns at start or end of sequence to homogenise data
-    mutate(Sequence = str_remove_all(Sequence, "^N+|N+$|-")) %>% 
-  # To ensure high quality data, remove any sequences with over 1% of ambiguous nucleotides
-    filter(str_count(Sequence, "N") <= 
-             (N_thresh * str_length(Sequence)))
+    # remove Ns at start or end of sequence to homogenise data
+    mutate(Sequence = str_remove_all(Sequence, "^N+|N+$|-")) %>%
+    # To ensure high quality data, remove any sequences with over 1% of ambiguous nucleotides
+    filter(str_count(Sequence, "N") <=
+      (N_thresh * str_length(Sequence)))
   # Remove sequences that are not close to the median to homogenise data
   if (by == "range") {
     filtered <- filtered %>%
-      filter(str_length(Sequence) >= q[1]
-             & str_count(Sequence) <= q[3])
-    } else if (by == "length") {
+      filter(str_length(Sequence) >= q[1] &
+        str_count(Sequence) <= q[3])
+  } else if (by == "length") {
     filtered <- filtered %>%
-      filter(str_length(Sequence) >= q[2] - len
-             & str_length(Sequence) <= q[2] + len)
-    } else {stop("Please filter by range or by length.")}
+      filter(str_length(Sequence) >= q[2] - len &
+        str_length(Sequence) <= q[2] + len)
+  } else {
+    stop("Please filter by range or by length.")
+  }
 
   explore_data(filtered)
-  return(filtered)}
+  return(filtered)
+}
 
 # Create new filtered COI and CytB datasets
 dfCOI_filtered <- filter_seq(dfCOI, by = "length")
-
 dfCytB_filtered <- filter_seq(dfCytB, by = "length")
 ```
 
@@ -159,18 +175,17 @@ seq_length_CytB_filtered <- nchar(dfCytB_filtered$Sequence)
 hist(seq_length_COI_filtered,
   xlab = "Sequence Length",
   ylab = "Frequency",
+  main = NULL,
   col = rgb(1, 0, 0, 0.5),
   breaks = "Sturges",
-  xlim = c(400, 1400), # Extend x-axis to accomodate sequence length of both COI and CytB
-  ylim = c(0, 2000)
-) # Extend y-axis to accomodate sequence length of CytB
+  xlim = c(400, 1400), # Extend x-axis to accommodate sequence length of both COI and CytB
+  ylim = c(0, 2000)) # Extend y-axis to accommodate sequence length of CytB
 
 # Overlay CytB histogram
 hist(seq_length_CytB_filtered,
   col = rgb(0, 0, 1, 0.5),
   breaks = "Sturges",
-  add = TRUE
-)
+  add = TRUE)
 
 legend("top",
   legend = c("COI", "CytB"),
@@ -179,8 +194,7 @@ legend("top",
   pt.cex = 4,
   bty = "n",
   x.intersp = 1,
-  y.intersp = 0.6
-)
+  y.intersp = 0.6)
 ```
 
 
@@ -210,14 +224,14 @@ matrix_heatmap <- t(as.matrix(data.frame(COI = average_dinucleotide_proportions_
                               byrow = TRUE))
 
 heatmap(matrix_heatmap,
-  Rowv = NA, Colv = NA, scale = "none",
-  col = colorRampPalette(c("deeppink", "mediumpurple4", "lightseagreen"))(1000),
-  xlab = "Dinucleotides")
+        Rowv = NA, Colv = NA, scale = "none",
+        col = colorRampPalette(c("deeppink", "mediumpurple4", "lightseagreen"))(1000),
+        xlab = "Dinucleotides")
 ```
 
 ## 5. Train, test and compare classifiers
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning = FALSE}
 dfCOI_filtered$Gene <- "COI"
 dfCytB_filtered$Gene <- "CytB"
 df_combined <- rbind(dfCOI_filtered, dfCytB_filtered)
@@ -246,16 +260,14 @@ rf_gene_classifier <- train(Gene ~ .,
   data = combined_training_df[, -(1:2)],
   method = "rf",
   importance = TRUE,
-  trControl = trainControl(method = "cv", number = 10)
-)
+  trControl = trainControl(method = "cv", number = 10))
 
 # using the linear regression algorithm to train a separate classifier
 lr_gene_classifier <- train(Gene ~ .,
   data = combined_training_df[, -(1:2)],
   method = "glm",
   family = "binomial",
-  tuneLength = 10
-)
+  tuneLength = 10)
 
 rf_gene_classifier
 lr_gene_classifier
@@ -270,37 +282,42 @@ table(observed = combined_validation_df$Gene, predicted = predictValidation_rf)
 ```
 
 
-
-
-
 # 6. Create visualizations to compare feature importance and speed of RF and KNN classifiers
 
 ```{r, fig.cap = "Lollipop plots which shows the feature importance of different dinucleotides for the random forest and logistic regression algorithm. The different algorithms assign different importance scores to different dinucleotides due to how the different algorithms learn from the data and what they prioritize."}
-importance_plot <- function(classifier, type){
-feature_importance <- varImp(classifier)
+importance_plot <- function(classifier, type) {
+  feature_importance <- varImp(classifier)
 
-# Convert to data.table for easier manipulation
-imp_vec <- rowMeans(feature_importance$importance)
-imp <- data.table(
-  Feature = names(imp_vec),
-  Importance = imp_vec)
+  # Convert to data.table for easier manipulation
+  imp_vec <- rowMeans(feature_importance$importance)
+  imp <- data.table(
+    Feature = names(imp_vec),
+    Importance = imp_vec
+  )
 
-# Create lollipop plot
-plot <- ggplot(data = imp, aes(x = reorder(Feature, Importance), 
-                                     y = Importance,
-                                     colour = type)) +
-  geom_segment(aes(x = reorder(Feature, Importance), 
-                   xend = reorder(Feature, Importance), 
-                   y = 0, 
-                   yend = Importance,
-                   colour = type), 
-               size = 1) +
-  geom_point(size = 3) +
-  coord_flip() +
-  theme_minimal() +
-  labs(x = "Features", y = "Feature Importance Score")
+  # Create lollipop plot
+  plot <- ggplot(data = imp, aes(
+    x = reorder(Feature, Importance),
+    y = Importance,
+    colour = type
+  )) +
+    geom_segment(
+      aes(
+        x = reorder(Feature, Importance),
+        xend = reorder(Feature, Importance),
+        y = 0,
+        yend = Importance,
+        colour = type
+      ),
+      size = 1
+    ) +
+    geom_point(size = 3) +
+    coord_flip() +
+    theme_minimal() +
+    labs(x = "Features", y = "Feature Importance Score")
 
-return(plot)}
+  return(plot)
+}
 
 plot_RF <- importance_plot(rf_gene_classifier, "Random Forest")
 plot_LR <- importance_plot(lr_gene_classifier, "Logistic Regression")
@@ -319,7 +336,7 @@ plot_RF +
 ```
 
 
-```{r, message = FALSE, fig.cap = "K-mer number vs time elapsed (A) and k-mer number vs model accuracy (B) fitted line graphs which show the speed of training and accuracy at different k mer sizes for the logistic regression and random forest algorithms. The random forest algorithm was slower at all k mer sizes, especially as k mer continued to increase the difference between the two algorithms in terms of speed grew farther and farther apart. Random forest seems to be increasingly slower with higher k mer, potentially due to the greater increase of decision tree complexity and number as k mer size continues to get larger."}
+```{r, message = FALSE, warning = FALSE, fig.cap = "K-mer number vs time elapsed (A) and k-mer number vs model accuracy (B) fitted line graphs which show the speed of training and accuracy at different k mer sizes for the logistic regression and random forest algorithms. The random forest algorithm was slower at all k mer sizes, especially as k mer continued to increase the difference between the two algorithms in terms of speed grew farther and farther apart. Random forest seems to be increasingly slower with higher k mer, potentially due to the greater increase of decision tree complexity and number as k mer size continues to get larger."}
 
 # Simplify training data to only include relevant columns
 combined_training_df_simplified <- combined_training_df %>%
@@ -399,7 +416,7 @@ speed <- ggplot(combined_results,
        y = "Time Taken (seconds)")
 
 accuracy <- ggplot(combined_results, 
-                   aes(x = k, y = round((accuracy*100),2), color = model, shape = model)) +
+                   aes(x = k, y = round((accuracy*100), 2), color = model, shape = model)) +
   geom_smooth(method = "loess", se = FALSE, size = 1) +
   common_layers +
   labs(x = "K-mer Size",
