@@ -116,33 +116,36 @@ explore_data(dfCytB)
 ## 3. Data Filtering
 
 ```{r}
-missing_data <- 0.01
-length_var <- 100
+
+# create data filtering function to expand on usage of explore_data() function
+filter_seq <- function(df, range = 0.9, N_thresh = 0.01, len = 100, by = NULL){
+  if (is.null(by)) {by = "range"} # default
+  alpha <- (1-range)
+  q <- quantile(str_length(df$Sequence), probs = c(alpha/2, 0.5, 1-alpha/2))
+  filtered <- df %>%
+  # remove Ns at start or end of sequence to homogenise data
+    mutate(Sequence = str_remove_all(Sequence, "^N+|N+$|-")) %>% 
+  # To ensure high quality data, remove any sequences with over 1% of ambiguous nucleotides
+    filter(str_count(Sequence, "N") <= 
+             (N_thresh * str_length(Sequence)))
+  # Remove sequences that are not close to the median to homogenise data
+  if (by == "range") {
+    filtered <- filtered %>%
+      filter(str_length(Sequence) >= q[1]
+             & str_count(Sequence) <= q[3])
+    } else if (by == "length") {
+    filtered <- filtered %>%
+      filter(str_length(Sequence) >= q[2] - len
+             & str_length(Sequence) <= q[2] + len)
+    } else {stop("Please filter by range or by length.")}
+
+  explore_data(filtered)
+  return(filtered)}
 
 # Create new filtered COI and CytB datasets
-dfCOI_filtered <- dfCOI %>%
-  # remove Ns at start or end of sequence to homogenise data
-  mutate(Sequence = str_remove_all(Sequence, "^N+|N+$|-")) %>% 
-  # To ensure high quality data, remove any sequences with over 1% of ambiguous nucleotides
-  filter(str_count(Sequence, "N") <= 
-           (missing_data * str_count(Sequence))) %>%
-  # Remove sequences that are not close to the median to homogenise data
-  filter(str_count(Sequence) >= 
-           median(str_count(Sequence)) - length_var 
-         & str_count(Sequence) <= 
-           median(str_count(Sequence)) + length_var)
+dfCOI_filtered <- filter_seq(dfCOI, by = "length")
 
-dfCytB_filtered <- dfCytB %>%
-  mutate(Sequence = str_remove_all(Sequence, "^N+|N+$|-")) %>%
-  filter(str_count(Sequence, "N") <= 
-           (missing_data * str_count(Sequence))) %>%
-  filter(str_count(Sequence) >= 
-           median(str_count(Sequence)) - length_var 
-         & str_count(Sequence) <= 
-           median(str_count(Sequence)) + length_var) 
-
-explore_data(dfCOI_filtered)
-explore_data(dfCytB_filtered)
+dfCytB_filtered <- filter_seq(dfCytB, by = "length")
 ```
 
 ## 4. Sequence Length Visualization and K-Mer Frequency Visualization
@@ -203,12 +206,12 @@ average_dinucleotide_proportions_CytB <- colMeans(dfCytB_filtered[, -(1:2)],
 
 # Create the heatmap to visualize the differences in dinucleotide proportions between COI and CytB
 matrix_heatmap <- t(as.matrix(data.frame(COI = average_dinucleotide_proportions_COI,
-                                                 CytB = average_dinucleotide_proportions_CytB),
+                                         CytB = average_dinucleotide_proportions_CytB),
                               byrow = TRUE))
 
 heatmap(matrix_heatmap,
   Rowv = NA, Colv = NA, scale = "none",
-  col = colorRampPalette(c("hotpink", "mediumpurple4", "lightseagreen"))(1000),
+  col = colorRampPalette(c("deeppink", "mediumpurple4", "lightseagreen"))(1000),
   xlab = "Dinucleotides")
 ```
 
