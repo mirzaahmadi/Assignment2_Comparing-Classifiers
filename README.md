@@ -1,5 +1,6 @@
 # Assignment2_Comparing-Classifiers
-This repository holds my scripts for Assignment 2 for BINF6210 at the University of Guelph (F24).
+This project evaluates the performance of Random Forest and Linear Regression models for gene sequence classification. Visualizations were developed to illustrate sequence length distributions, k-mer frequency proportions, and feature importance, providing insights into model performance and key classification features.
+
 
 # Attribution:
 ## Primary Author: 
