@@ -271,7 +271,7 @@ rf_gene_classifier <- train(Gene ~ .,
   trControl = trainControl(method = "cv", number = 10)
 )
 
-# using the linear regression algorithm to train a separate classifier
+# using the logistic regression algorithm to train a separate classifier (however, specifying the logistic regression format)
 lr_gene_classifier <- train(Gene ~ .,
   data = combined_training_df[, 13:27],
   method = "glm",
@@ -286,7 +286,7 @@ lr_gene_classifier
 predictValidation_rf <- predict(rf_gene_classifier, combined_validation_df[, c(27, 13:27)])
 table(observed = combined_validation_df$Gene, predicted = predictValidation_rf)
 
-# Assess the accuracy of the testing dataset with linear regression
+# Assess the accuracy of the testing dataset
 predictValidation_lg <- predict(lr_gene_classifier, combined_validation_df[, c(27, 13:27)])
 table(observed = combined_validation_df$Gene, predicted = predictValidation_rf)
 
@@ -340,7 +340,7 @@ get_kmer_profile <- function(sequence, k) {
   oligonucleotideFrequency(DNAString(sequence), width = k, as.prob = T)
 }
 
-# Loop through k-mer sizes 1 to 4 for both linear regression and random forest algorithms, storing their results in data frames for downstream visualization
+# Loop through k-mer sizes 1 to 4 for both Logistic regression and random forest algorithms, storing their results in data frames for downstream visualization
 
 # I have commented the below code because it takes quite a while to run and come up with the output data table. I have saved the data table in my 'data' folder as an excel file, so that it is quick and convenient to run without having to run the for loop
 
