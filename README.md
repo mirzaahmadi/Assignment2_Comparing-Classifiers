@@ -1,5 +1,5 @@
 # Assignment2_Comparing-Classifiers
-This project evaluates the performance of Random Forest and Linear Regression models for gene sequence classification. Visualizations were developed to illustrate sequence length distributions, k-mer frequency proportions, and feature importance, providing insights into model performance and key classification features.
+This project evaluates the performance of Random Forest and Logistic Regression models for gene sequence classification. Visualizations were developed to illustrate sequence length distributions, k-mer frequency proportions, and feature importance, providing insights into model performance and key classification features.
 
 
 # Attribution:
